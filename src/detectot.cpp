@@ -1,5 +1,6 @@
 #include <opencv2/opencv.hpp>
 #include <stdio.h>
+#include <sys/time.h>
 #include <iostream>
 
 
@@ -49,7 +50,7 @@ void points(Point* p1, Point* p2, double rho, double theta) {
 
 void transfotmToCartesianLine(vector<CartesianLine>& toLines, vector<Vec2f>& fromLines) {
 	toLines.clear();
-	for (int i = 0; i < fromLines.size(); i++){
+	for (uint i = 0; i < fromLines.size(); i++){
 		Vec2f& fromLine = fromLines[i];
 		CartesianLine toLine;
 		float rho = fromLine[0], theta = fromLine[1];
@@ -69,7 +70,7 @@ void average (Point& p, vector<Point>& points){
 	if (points.size() == 0)
 		return;
 	int x = 0,y = 0;
-	for (int i = 0; i < points.size();i++) {
+	for (uint i = 0; i < points.size();i++) {
 		x += points[i].x;
 		y += points[i].y;
 	}
@@ -91,7 +92,7 @@ void addPoint(Point& p, vector<Point>& points){
 void detectIntersection(int currentPosition, vector<Point>& points, vector<CartesianLine>& lines) {
 	int cp = currentPosition + 1;
 	int k = 2;
-	for (int i = cp; i < lines.size(); i++){
+	for (uint i = cp; i < lines.size(); i++){
 		if (pow(lines[currentPosition].k - lines[i].k, 2.0) > k) {
 			float x = (lines[i].b - lines[currentPosition].b) / (lines[currentPosition].k - lines[i].k);
 			float y = lines[currentPosition].k * x + lines[currentPosition].b;
@@ -104,7 +105,7 @@ void detectIntersection(int currentPosition, vector<Point>& points, vector<Carte
 void detectIntersection(vector<Point>& points, vector<CartesianLine>& cLines) {
 	if (cLines.size() < 2)
 		return;
-	for (int i = 0; i < cLines.size(); i++){
+	for (uint i = 0; i < cLines.size(); i++){
 		detectIntersection(i, points, cLines);
 	}
 
@@ -113,7 +114,7 @@ void detectIntersection(vector<Point>& points, vector<CartesianLine>& cLines) {
 bool detectIntersections(Mat& gray, vector<Point>& intersections) {
 	bool result = false;
 	vector<Vec2f> lines;
-	HoughLines(gray, lines, 1, CV_PI / 180, 180, 0, 0);
+	HoughLines(gray, lines, 1, CV_PI / 180, 170, 0, 0);
 	for (size_t i = 0; i < lines.size(); i++) {
 		float rho = lines[i][0], theta = lines[i][1];
 		Point p1, p2;
@@ -141,15 +142,15 @@ void detectCircles(Mat& gray, vector<Circle>& circles) {
 	}
 }
 
-void drawPoints(Mat& mat, vector<Point>& points, int radius, Scalar& color){
-	for (int i = 0; i < points.size(); i++) {
+void drawPoints(Mat& mat, vector<Point>& points, int radius, Scalar color){
+	for (uint i = 0; i < points.size(); i++) {
 		circle(mat, points[i], 3, color, -1, 8, 0);
 	}
 }
 
-void drawPoints(Mat& mat, vector<Circle>& circles, int radius, Scalar& color){
+void drawPoints(Mat& mat, vector<Circle>& circles, int radius, Scalar color){
 	vector<Point> points(circles.size());
-	for (int i = 0; i < circles.size(); i++) {
+	for (uint i = 0; i < circles.size(); i++) {
 		points[i] = circles[i].center;
 	}
 	drawPoints(mat, points, radius, color);
@@ -157,22 +158,30 @@ void drawPoints(Mat& mat, vector<Circle>& circles, int radius, Scalar& color){
 
 int main(int argc, char** argv) {
 	VideoCapture cap;
+	cap.set(CV_CAP_PROP_FPS , 25);
 	if (argc > 1)
 		cap.open(string(argv[1]));
 	else
-		cap.open(0);
+		cap.open(1);
 
-	Mat src, frame;
+	Mat frame;
 
-	char* file = "C:\\Users\\chepyryov_ki\\Pictures\\target30.jpg";
+	double start, stop;
+
+
 
 	for (;;) {
+
+		struct timeval  tv;
+		gettimeofday(&tv, NULL);
+
+		start = (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ;
+
 		vector<Point> intersections;
 		vector<Circle> circles;
-		//cap >> frame;
-		frame = imread(file, IMREAD_COLOR);
+		cap >> frame;
 		Mat edged;
-		threshold(frame, 120);
+		threshold(frame, 150);
 		Canny(frame, edged, 50, 200, 5);
 
 		detectIntersections(edged, intersections);
@@ -183,18 +192,19 @@ int main(int argc, char** argv) {
 		average(p, intersections);
 		circle(frame, p, 5, Scalar(151,222,0), 5);
 
-		Scalar s1 = Scalar(30,50,255);
-		drawPoints(frame, intersections, 3, s1);
+		drawPoints(frame, intersections, 3, Scalar(30,50,255));
 
 		detectCircles(edged, circles);
 
-		Scalar s2 = Scalar(30,50,255);
-		drawPoints(frame, circles, 3, s2);
+		drawPoints(frame, circles, 5, Scalar(130,50,155));
 
 		imshow("detected lines", edged);
 		imshow("circles", frame);
-		src = imread(file, IMREAD_COLOR);
-		imshow("source", src);
+
+		gettimeofday(&tv, NULL);
+		stop = (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ;
+
+		cout << stop - start << "ms. passed\n";
 
 		if (waitKey(30) >= 0)
 			break;
