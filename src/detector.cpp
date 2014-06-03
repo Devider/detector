@@ -1,8 +1,37 @@
+#include "stdafx.h"
+
 #include <opencv2/opencv.hpp>
 #include <stdio.h>
-#include <sys/time.h>
 #include <iostream>
 
+
+#ifdef __unix__ 
+	#include <sys/time.h>
+	typedef time_t milisec_t;
+	milisec_t getMilisecs(){
+		struct timeval  tv;
+		gettimeofday(&tv, NULL);
+		return (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ;
+	}
+
+#elif defined(_WIN32) || defined(WIN32) 
+	#include <windows.h>
+	typedef unsigned int uint;
+
+	typedef DWORD milisec_t;
+
+	milisec_t getMilisecs(){
+		SYSTEMTIME st;
+		GetLocalTime(&st);
+		return st.wMilliseconds + st.wSecond * 1000;
+	}
+#endif
+
+#define W 640
+#define H 480
+
+#define CORRECT(X, MAX_X)\
+	((X) > 0 && (X) < (MAX_X))
 
 
 using namespace std;
@@ -63,13 +92,10 @@ void average (Point& p, vector<Point>& points){
 	p.y = y;
 }
 
-bool correct (int value, int min, int max){
-	return value > min && value < max;
-}
 
 void addPoint(Point& p, vector<Point>& points){
-	if (correct(p.x, 0, 640) && correct (p.y, 0, 480))
-				points.push_back(p);
+	if ( CORRECT(p.x, W) && CORRECT(p.y, H) )
+		points.push_back(p);
 };
 
 void detectIntersection(int currentPosition, vector<Point>& points, vector<CartesianLine>& lines) {
@@ -139,34 +165,36 @@ void drawPoints(Mat& mat, vector<Circle>& circles, int radius, Scalar color){
 	drawPoints(mat, points, radius, color);
 }
 
+void printText(string& text, Mat& img){
+	int fontFace = FONT_HERSHEY_SIMPLEX;
+	double fontScale = .8;
+	int thickness = 1;
+	int baseline=0;
+	Size textSize = getTextSize(text, fontFace, fontScale, thickness, &baseline);
+	Point textOrg(10, 30);
+
+	putText(img, text, textOrg, fontFace, fontScale, Scalar(255, 0, 128), thickness, 8);
+
+}
+
 int main(int argc, char** argv) {
 	VideoCapture cap;
-	cap.set(CV_CAP_PROP_FPS , 10);
 	if (argc > 1)
 		cap.open(string(argv[1]));
 	else
 		cap.open(0);
-
-	if (!cap.isOpened())
-		cout << "NOT OPENED!" << endl;
-
-	Mat frame, edged;
-
-	time_t start, stop;
-
-
+	
+	cap.set(CV_CAP_PROP_FRAME_WIDTH, W);
+	cap.set(CV_CAP_PROP_FRAME_HEIGHT, H);
+	
+	Mat src, frame, edged;
+	milisec_t last = getMilisecs(), current = getMilisecs();
 
 	for (;;) {
-
-		struct timeval  tv;
-		gettimeofday(&tv, NULL);
-
-		start = (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ;
-
 		vector<Point> intersections;
 		vector<Circle> circles;
 		cap >> frame;
-//		Mat src = frame;
+		Mat src = frame;
 
 		if ( frame.empty() ){
 			cout << "Frame is empty!" << endl;
@@ -180,31 +208,32 @@ int main(int argc, char** argv) {
 
 		detectIntersections(edged, intersections);
 
-		cout << "Lines intersections found: " << intersections.size() << "\n";
-
-		Point p;
+		Point p(-10, -10);
 		average(p, intersections);
-
-
 
 		detectCircles(edged, circles);
 
-//		drawPoints(src, intersections, 3, Scalar(30, 50, 255));
-//		circle(src, p, 5, Scalar(251,222,0), 5);
-//		drawPoints(src, circles, 3, Scalar(250, 250, 0));
+		drawPoints(src, intersections, 3, Scalar(30, 50, 255));
+		circle(src, p, 5, Scalar(251,222,0), 5);
+		drawPoints(src, circles, 3, Scalar(250, 250, 0));
 
-//		imshow("detected lines", edged);
-//		imshow("circles", frame);
-//		imshow("src", src);
+		current = getMilisecs();
 
-		gettimeofday(&tv, NULL);
-		stop = (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ;
+		stringstream ss;
+		ss << "Found points: " << intersections.size() << " cirecles :" << circles.size() << " fps: " << 1000 / (current - last);
+		last = current;
+		
+		printText(ss.str(), src);
 
-		cout << stop - start << "ms. passed\n";
+		imshow("detected lines", edged);
+		imshow("circles", frame);
+		imshow("src", src);
 
 		if (waitKey(30) >= 0)
 			break;
 
 	}
 }
+
+
 
