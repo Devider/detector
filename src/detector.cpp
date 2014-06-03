@@ -5,6 +5,7 @@
 #include <iostream>
 
 
+
 #ifdef __unix__ 
 	#include <sys/time.h>
 	typedef time_t milisec_t;
@@ -151,18 +152,22 @@ void detectCircles(Mat& gray, vector<Circle>& circles) {
 	}
 }
 
-void drawPoints(Mat& mat, vector<Point>& points, int radius, Scalar color){
+void drawPoint(Mat& mat, Point& point, int radius, Scalar color){
+	circle(mat, point, radius, color, 1, 8, 0);
+}
+
+void drawPoints(Mat& mat, vector<Point>& points, Scalar color){
 	for (uint i = 0; i < points.size(); i++) {
-		circle(mat, points[i], 3, color, -1, 8, 0);
+		drawPoint(mat, points[i], 3, color);
 	}
 }
 
-void drawPoints(Mat& mat, vector<Circle>& circles, int radius, Scalar color){
+void drawCircles(Mat& mat, vector<Circle>& circles, Scalar& color){
 	vector<Point> points(circles.size());
 	for (uint i = 0; i < circles.size(); i++) {
 		points[i] = circles[i].center;
+		drawPoint(mat, points[i], circles[i].radius, color);
 	}
-	drawPoints(mat, points, radius, color);
 }
 
 void printText(string& text, Mat& img){
@@ -177,6 +182,16 @@ void printText(string& text, Mat& img){
 
 }
 
+bool belongs(Point& p, Circle c){
+	return (pow((p.x - c.center.x), 2) + pow((p.y - c.center.y), 2) < pow(c.radius, 2));
+}
+
+void startLanding(Mat& img, Point& averageIntersections, Circle& c){
+	if (belongs(averageIntersections, c)){
+		circle(img, averageIntersections, 15, Scalar(128,128,0), 4);
+	}
+}
+
 int main(int argc, char** argv) {
 	VideoCapture cap;
 	if (argc > 1)
@@ -189,8 +204,8 @@ int main(int argc, char** argv) {
 	
 	Mat src, frame, edged;
 	milisec_t last = getMilisecs(), current = getMilisecs();
-
-	for (;;) {
+	bool landing = false;
+	while (! landing) {
 		vector<Point> intersections;
 		vector<Circle> circles;
 		cap >> frame;
@@ -203,27 +218,32 @@ int main(int argc, char** argv) {
 
 		cvtColor( frame, frame, CV_RGB2GRAY );
 		threshold( frame, frame, 97, 255, 0 );
-
+		GaussianBlur( frame, frame, Size(9, 9), 2, 2 );
+	
 		Canny(frame, edged, 50, 100);
 
 		detectIntersections(edged, intersections);
 
-		Point p(-10, -10);
-		average(p, intersections);
+		Point averageIntersection(-10, -10);
+		average(averageIntersection, intersections);
 
 		detectCircles(edged, circles);
 
-		drawPoints(src, intersections, 3, Scalar(30, 50, 255));
-		circle(src, p, 5, Scalar(251,222,0), 5);
-		drawPoints(src, circles, 3, Scalar(250, 250, 0));
+		drawPoints(src, intersections, Scalar(30, 50, 255));
+		circle(src, averageIntersection, 5, Scalar(251,222,0), 5);
+		drawCircles(src, circles, Scalar(250, 250, 0));
 
 		current = getMilisecs();
 
 		stringstream ss;
-		ss << "Found points: " << intersections.size() << " cirecles :" << circles.size() << " fps: " << 1000 / (current - last);
+		ss << "Found points: " << intersections.size() << " cirecles :" << circles.size() << " delay: " << (current - last) << " (~ " << 1000 / (current - last) << "fps)";
 		last = current;
 		
 		printText(ss.str(), src);
+
+		if (intersections.size() > 1 && circles.size() == 1) {
+			startLanding(src, averageIntersection, circles[0]);
+		}
 
 		imshow("detected lines", edged);
 		imshow("circles", frame);
